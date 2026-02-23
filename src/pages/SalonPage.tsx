@@ -1,26 +1,60 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Salon, Service, Booking, convertDBSalonToSalon, convertDBServiceToService, convertDBBookingToBooking } from "../types";
-import { supabase } from "../lib/supabase";
-import { Calendar as CalendarIcon, Clock, ArrowLeft, CheckCircle2, ChevronRight, MapPin, Scissors, Info, CalendarPlus, MailCheck, Loader2 } from "lucide-react";
+import { 
+  Salon, 
+  Service, 
+  Booking,
+  convertSalonFromDb, 
+  convertBookingFromDb 
+} from "../types";
+import { 
+  getSalonBySlug, 
+  getServicesBySalonId, 
+  getBookingsBySalonId, 
+  createBooking,
+  checkConnection,
+  DatabaseSalon,
+  DatabaseService,
+  DatabaseBooking
+} from "../lib/supabase";
+import { 
+  sendBookingConfirmationEmail, 
+  isEmailConfigured 
+} from "../lib/email";
+import { Calendar as CalendarIcon, Clock, ArrowLeft, CheckCircle2, ChevronRight, MapPin, Scissors, Info, CalendarPlus, MailCheck, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { format, addDays, startOfToday } from "date-fns";
 import { lt } from "date-fns/locale";
+
+type Step = 'service' | 'datetime' | 'details' | 'confirmation';
 
 export function SalonPage() {
   const { salonSlug } = useParams<{ salonSlug: string }>();
   const [salon, setSalon] = useState<Salon | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   
-  // Keep local state for bookings to show dynamic unavailability
+  // Lokali būsena rezervacijoms
   const [bookings, setBookings] = useState<Booking[]>([]);
   
-  const [step, setStep] = useState<'service' | 'datetime' | 'details' | 'confirmation'>('service');
+  // UI būsenos
+  const [step, setStep] = useState<Step>('service');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
   const [isBooking, setIsBooking] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
+  // Apskaičiuoti pabaigos laiką
+  const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+    const [h, m] = startTime.split(':').map(Number);
+    const totalMinutes = h * 60 + m + durationMinutes;
+    const endH = Math.floor(totalMinutes / 60);
+    const endM = totalMinutes % 60;
+    return `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+  };
+
+  // Generuoti Google Calendar nuorodą
   const generateGoogleCalendarLink = () => {
     if (!salon || !selectedService || !selectedDate || !selectedTime) return '#';
     
@@ -39,88 +73,9 @@ export function SalonPage() {
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}`;
   };
 
-  useEffect(() => {
-    const fetchSalonData = async () => {
-      if (!salonSlug) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Fetch salon from Supabase
-        const { data: dbSalon, error: salonError } = await supabase
-          .from('salons')
-          .select('*')
-          .ilike('slug', salonSlug)
-          .single();
-
-        if (salonError) {
-          console.error('Supabase salon fetch error:', salonError.message);
-          setLoading(false);
-          return;
-        }
-
-        if (dbSalon) {
-          // Fetch services for this salon
-          const { data: dbServices } = await supabase
-            .from('services')
-            .select('*')
-            .eq('salon_id', dbSalon.id);
-
-          // Fetch bookings for this salon
-          const { data: dbBookings } = await supabase
-            .from('bookings')
-            .select('*')
-            .eq('salon_id', dbSalon.id);
-
-          // Convert DB types to app types
-          const services = (dbServices || []).map(convertDBServiceToService);
-          const salonData = convertDBSalonToSalon(dbSalon, services);
-          const bookingsData = (dbBookings || []).map(convertDBBookingToBooking);
-
-          setSalon(salonData);
-          setBookings(bookingsData);
-        }
-      } catch (error) {
-        console.error('Error fetching from Supabase:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSalonData();
-  }, [salonSlug]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#fafaf9] flex items-center justify-center">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-stone-200 border-t-stone-800 rounded-full animate-spin"></div>
-          <p className="text-stone-500 font-medium">Kraunama informacija...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!salon) {
-    return (
-      <div className="min-h-screen bg-[#fafaf9] flex flex-col items-center justify-center gap-4 text-center px-6">
-        <h1 className="text-2xl font-semibold text-stone-900">Salonas nerastas</h1>
-        <p className="text-stone-500 max-w-sm">Atsiprašome, tačiau salonas su šiuo adresu neegzistuoja.</p>
-        <Link to="/" className="mt-4 px-6 py-2 bg-stone-900 text-white rounded-full text-sm font-medium hover:bg-stone-800 transition">
-          Grįžti į pagrindinį
-        </Link>
-      </div>
-    );
-  }
-
-  // Generate next 14 days
-  const today = startOfToday();
-  const availableDates = Array.from({ length: 14 }).map((_, i) => addDays(today, i));
-
-  // Time slot generation logic
+  // Gauti laisvus laikus
   const getAvailableTimes = (dateStr: string) => {
-    if (!selectedService) return [];
+    if (!selectedService || !salon) return [];
     
     const times: string[] = [];
     const [openH, openM] = salon.workingHours.open.split(':').map(Number);
@@ -130,14 +85,18 @@ export function SalonPage() {
     const endMin = closeH * 60 + closeM;
     const duration = selectedService.duration;
 
-    // Get booked ranges for this date
-    // We assume an average booked service length of 60 mins for mock bookings where we don't have service data
-    const bookedRanges = bookings.filter(b => b.date === dateStr).map(b => {
-      const [h, m] = b.time.split(':').map(Number);
-      const start = h * 60 + m;
-      // In real app, we'd lookup the service duration from booking
-      return { start, end: start + 60 }; 
-    });
+    // Gauti užimtus intervalus
+    const bookedRanges = bookings
+      .filter(b => b.date === dateStr)
+      .map(b => {
+        const [h, m] = b.time.split(':').map(Number);
+        const start = h * 60 + m;
+        const endTime = b.endTime;
+        const end = endTime 
+          ? endTime.split(':').reduce((acc, t) => acc * 60 + parseInt(t), 0)
+          : start + 60;
+        return { start, end };
+      });
 
     while (currentMin + duration <= endMin) {
       const s = currentMin;
@@ -150,55 +109,164 @@ export function SalonPage() {
         const mins = (currentMin % 60).toString().padStart(2, '0');
         times.push(`${hours}:${mins}`);
       }
-      currentMin += 30; // 30 min increments
+      currentMin += 30;
     }
     
     return times;
   };
 
+  // Duomenų gavimas iš Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setConnectionError(null);
+
+      try {
+        // Patikrinti ryšį
+        const isConnected = await checkConnection();
+        if (!isConnected) {
+          setConnectionError('Nepavyko prisijungti prie duomenų bazės. Patikrinkite interneto ryšį.');
+          setLoading(false);
+          return;
+        }
+
+        if (salonSlug) {
+          const dbSalon = await getSalonBySlug(salonSlug);
+          
+          if (dbSalon) {
+            const dbServices = await getServicesBySalonId(dbSalon.id);
+            const dbBookings = await getBookingsBySalonId(dbSalon.id);
+            
+            const convertedSalon = convertSalonFromDb(dbSalon as DatabaseSalon, dbServices as DatabaseService[]);
+            setSalon(convertedSalon);
+            setBookings(dbBookings.map((b: DatabaseBooking) => convertBookingFromDb(b)));
+          } else {
+            setSalon(null);
+          }
+        }
+      } catch (error) {
+        console.error('Klaida gaunant duomenis:', error);
+        setConnectionError('Įvyko klaida gaunant duomenis.');
+      }
+      
+      setLoading(false);
+    };
+
+    fetchData();
+  }, [salonSlug]);
+
+  // Rezervacijos pateikimas
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedService || !selectedDate || !selectedTime || !salon) return;
     
     setIsBooking(true);
-    
-    try {
-      // Save booking to Supabase
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert([
-          {
-            salon_id: salon.id,
-            service_id: selectedService.id,
-            date: selectedDate,
-            time: selectedTime,
-            customer_name: formData.name,
-            customer_email: formData.email,
-            customer_phone: formData.phone
-          }
-        ])
-        .select()
-        .single();
+    setBookingError(null);
 
-      if (error) {
-        console.error('Error saving booking to Supabase:', error);
-        alert('Nepavyko išsaugoti rezervacijos. Bandykite dar kartą.');
-        setIsBooking(false);
-        return;
+    const bookingData = {
+      salon_id: salon.id,
+      service_id: selectedService.id,
+      date: selectedDate,
+      time: selectedTime,
+      end_time: calculateEndTime(selectedTime, selectedService.duration),
+      customer_name: formData.name,
+      customer_email: formData.email,
+      customer_phone: formData.phone
+    };
+
+    try {
+      const result = await createBooking(bookingData);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Nepavyko sukurti rezervacijos');
+      }
+      
+      // Pridėti naują rezervaciją prie vietinės būsenos
+      if (result.data) {
+        const newBooking: Booking = {
+          id: result.data.id,
+          salonId: salon.id,
+          serviceId: selectedService.id,
+          date: selectedDate,
+          time: selectedTime,
+          endTime: bookingData.end_time,
+          userName: formData.name,
+          userPhone: formData.phone,
+          userEmail: formData.email,
+          status: 'confirmed'
+        };
+        setBookings(prev => [...prev, newBooking]);
       }
 
-      // Successfully saved to Supabase
-      const newBooking = convertDBBookingToBooking(data);
-      setBookings(prev => [...prev, newBooking]);
-      setIsBooking(false);
+      // Siųsti patvirtinimo el. laišką
+      const emailData = {
+        to_email: formData.email,
+        to_name: formData.name,
+        salon_name: salon.name,
+        service_name: selectedService.name,
+        booking_date: selectedDate,
+        booking_time: selectedTime,
+        duration: selectedService.duration,
+        price: selectedService.price,
+        salon_address: salon.address || '',
+        salon_phone: salon.phone || ''
+      };
+      
+      await sendBookingConfirmationEmail(emailData);
+      
       setStep('confirmation');
     } catch (error) {
-      console.error('Error in booking submission:', error);
-      alert('Įvyko netikėta klaida. Bandykite dar kartą.');
+      console.error('Rezervacijos klaida:', error);
+      setBookingError(error instanceof Error ? error.message : 'Įvyko klaida kuriant rezervaciją. Bandykite dar kartą.');
+    } finally {
       setIsBooking(false);
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#fafaf9] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-stone-200 border-t-stone-800 rounded-full animate-spin"></div>
+          <p className="text-stone-500 font-medium">Kraunama informacija...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Connection error
+  if (connectionError) {
+    return (
+      <div className="min-h-screen bg-[#fafaf9] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+        </div>
+        <h1 className="text-2xl font-semibold text-stone-900">Ryšio klaida</h1>
+        <p className="text-stone-500 max-w-sm">{connectionError}</p>
+        <Link to="/" className="mt-4 px-6 py-2 bg-stone-900 text-white rounded-full text-sm font-medium hover:bg-stone-800 transition">
+          Grįžti į pagrindinį
+        </Link>
+      </div>
+    );
+  }
+
+  // Salonas nerastas
+  if (!salon) {
+    return (
+      <div className="min-h-screen bg-[#fafaf9] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <h1 className="text-2xl font-semibold text-stone-900">Salonas nerastas</h1>
+        <p className="text-stone-500 max-w-sm">Atsiprašome, tačiau salonas su šiuo adresu neegzistuoja.</p>
+        <Link to="/" className="mt-4 px-6 py-2 bg-stone-900 text-white rounded-full text-sm font-medium hover:bg-stone-800 transition">
+          Grįžti į pagrindinį
+        </Link>
+      </div>
+    );
+  }
+
+  // Generuoti galimas datas (14 dienų)
+  const today = startOfToday();
+  const availableDates = Array.from({ length: 14 }).map((_, i) => addDays(today, i));
   const times = selectedDate ? getAvailableTimes(selectedDate) : [];
 
   return (
@@ -226,7 +294,14 @@ export function SalonPage() {
             {step === 'details' && "Jūsų informacija"}
             {step === 'confirmation' && "Rezervacija patvirtinta"}
           </div>
-          <div className="w-10"></div>
+          
+          <div className="w-10 flex items-center justify-center">
+            {step === 'service' && (
+              <div className="flex items-center gap-1 text-green-600" title="Prisijungta prie duomenų bazės">
+                <CheckCircle className="w-4 h-4" />
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -240,8 +315,14 @@ export function SalonPage() {
                 <h1 className="text-2xl font-semibold mb-2">{salon.name}</h1>
                 <p className="text-stone-500 text-sm leading-relaxed mb-4 max-w-md">{salon.description}</p>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs font-medium text-stone-600">
-                  <span className="flex items-center gap-1 bg-stone-100 px-3 py-1.5 rounded-full"><MapPin className="w-3 h-3" /> Vilnius</span>
-                  <span className="flex items-center gap-1 bg-stone-100 px-3 py-1.5 rounded-full"><Clock className="w-3 h-3" /> {salon.workingHours.open} - {salon.workingHours.close}</span>
+                  {salon.address && (
+                    <span className="flex items-center gap-1 bg-stone-100 px-3 py-1.5 rounded-full">
+                      <MapPin className="w-3 h-3" /> {salon.address}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 bg-stone-100 px-3 py-1.5 rounded-full">
+                    <Clock className="w-3 h-3" /> {salon.workingHours.open} - {salon.workingHours.close}
+                  </span>
                 </div>
               </div>
             </div>
@@ -249,30 +330,36 @@ export function SalonPage() {
             {/* Services List */}
             <div className="space-y-3">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-500 ml-1">Paslaugos</h2>
-              {salon.services.map(service => (
-                <button
-                  key={service.id}
-                  onClick={() => {
-                    setSelectedService(service);
-                    setStep('datetime');
-                  }}
-                  className="w-full bg-white border border-stone-200 p-4 rounded-xl flex items-center justify-between hover:border-stone-400 hover:shadow-md transition-all group text-left"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-500 group-hover:bg-stone-900 group-hover:text-white transition-colors">
-                      <Scissors className="w-4 h-4" />
+              {salon.services.length > 0 ? (
+                salon.services.map(service => (
+                  <button
+                    key={service.id}
+                    onClick={() => {
+                      setSelectedService(service);
+                      setStep('datetime');
+                    }}
+                    className="w-full bg-white border border-stone-200 p-4 rounded-xl flex items-center justify-between hover:border-stone-400 hover:shadow-md transition-all group text-left"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-500 group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                        <Scissors className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{service.name}</div>
+                        <div className="text-sm text-stone-500 mt-0.5">{service.duration} min.</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-medium">{service.name}</div>
-                      <div className="text-sm text-stone-500 mt-0.5">{service.duration} min.</div>
+                    <div className="flex items-center gap-3">
+                      <div className="font-semibold">{service.price}€</div>
+                      <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-stone-900 transition-colors" />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="font-semibold">{service.price}€</div>
-                    <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-stone-900 transition-colors" />
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))
+              ) : (
+                <div className="text-center p-8 bg-stone-100 rounded-xl text-stone-500">
+                  Šiuo metu paslaugų nėra.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -296,7 +383,7 @@ export function SalonPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-500 ml-1 mb-3 flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4" /> Pasirinkite dieną
               </h2>
-              <div className="flex gap-3 overflow-x-auto pb-4 snap-x hide-scrollbar" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex gap-3 overflow-x-auto pb-4 snap-x" style={{ scrollbarWidth: 'none' }}>
                 {availableDates.map((date, idx) => {
                   const dateStr = format(date, 'yyyy-MM-dd');
                   const isSelected = selectedDate === dateStr;
@@ -357,7 +444,7 @@ export function SalonPage() {
                 <div className="max-w-3xl mx-auto flex items-center justify-between">
                   <div>
                     <div className="text-sm text-stone-500">Pasirinktas laikas</div>
-                    <div className="font-semibold">{format(new Date(selectedDate as string), 'MMM d, EEE', { locale: lt })} • {selectedTime}</div>
+                    <div className="font-semibold">{format(new Date(selectedDate!), 'MMM d, EEE', { locale: lt })} • {selectedTime}</div>
                   </div>
                   <button
                     onClick={() => setStep('details')}
@@ -389,6 +476,14 @@ export function SalonPage() {
                 <span className="font-semibold text-base">{selectedService?.price}€</span>
               </div>
             </div>
+
+            {/* Error message */}
+            {bookingError && (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-700 text-sm flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                {bookingError}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -461,7 +556,12 @@ export function SalonPage() {
             {/* Email verification notice */}
             <div className="flex items-start sm:items-center gap-3 bg-blue-50/50 text-blue-800 border border-blue-100 px-5 py-4 rounded-xl mb-8 text-sm max-w-sm w-full text-left shadow-sm">
               <MailCheck className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5 sm:mt-0" />
-              <p className="leading-relaxed">Patvirtinimo laiškas su vizito informacija išsiųstas adresu <span className="font-semibold block sm:inline">{formData.email}</span></p>
+              <div className="leading-relaxed">
+                <p>Patvirtinimo laiškas su vizito informacija išsiųstas adresu <span className="font-semibold">{formData.email}</span></p>
+                {!isEmailConfigured() && (
+                  <p className="text-xs text-stone-500 mt-1">(EmailJS nėra sukonfigūruotas - el. laiškas neišsiųstas tikrovėje)</p>
+                )}
+              </div>
             </div>
             
             <div className="bg-white border border-stone-200 rounded-2xl p-6 w-full max-w-sm text-left space-y-4 mb-6">
@@ -486,6 +586,11 @@ export function SalonPage() {
                   <div className="font-medium">{selectedTime}</div>
                 </div>
               </div>
+              <div className="pt-2 border-t border-stone-100">
+                <span className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Išsaugota duomenų bazėje
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm">
@@ -505,6 +610,7 @@ export function SalonPage() {
                   setSelectedDate(null);
                   setSelectedTime(null);
                   setFormData({ name: '', phone: '', email: '' });
+                  setBookingError(null);
                 }}
                 className="w-full px-6 py-3 bg-white border border-stone-200 text-stone-900 rounded-xl font-medium hover:bg-stone-50 transition shadow-sm"
               >

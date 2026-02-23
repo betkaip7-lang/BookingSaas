@@ -1,41 +1,21 @@
-// Supabase Database Types (exact schema match)
-export interface DBSalon {
+// Frontend tipai
+export interface Service {
   id: string;
-  slug: string;
   name: string;
-  description: string;
-  logo: string;
-  working_hours_open: string;
-  working_hours_close: string;
-}
-
-export interface DBService {
-  id: string;
-  salon_id: string;
-  name: string;
-  duration: number; // in minutes
+  duration: number; // minutėmis
   price: number;
+  description?: string;
 }
 
-export interface DBBooking {
-  id: string;
-  salon_id: string;
-  service_id: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  created_at: string;
-}
-
-// Application Types (converted from database types)
 export interface Salon {
   id: string;
   slug: string;
   name: string;
   description: string;
   logo: string;
+  address?: string;
+  phone?: string;
+  email?: string;
   services: Service[];
   workingHours: {
     open: string;
@@ -43,56 +23,93 @@ export interface Salon {
   };
 }
 
-export interface Service {
-  id: string;
-  name: string;
-  duration: number; // in minutes
-  price: number;
-}
-
 export interface Booking {
   id: string;
+  salonId: string;
   serviceId: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
+  endTime?: string;
   userName: string;
   userPhone: string;
   userEmail: string;
+  status?: 'pending' | 'confirmed' | 'cancelled' | 'completed';
 }
 
-// Helper functions to convert DB types to app types
-export function convertDBSalonToSalon(dbSalon: DBSalon, services: Service[]): Salon {
-  return {
-    id: dbSalon.id,
-    slug: dbSalon.slug,
-    name: dbSalon.name,
-    description: dbSalon.description,
-    logo: dbSalon.logo,
-    services,
-    workingHours: {
-      open: dbSalon.working_hours_open,
-      close: dbSalon.working_hours_close
-    }
-  };
+// Duomenų bazės tipai (Supabase)
+export interface DatabaseSalon {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  logo: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  working_hours_open: string;
+  working_hours_close: string;
+  created_at: string;
 }
 
-export function convertDBServiceToService(dbService: DBService): Service {
-  return {
-    id: dbService.id,
-    name: dbService.name,
-    duration: dbService.duration,
-    price: dbService.price
-  };
+export interface DatabaseService {
+  id: string;
+  salon_id: string;
+  name: string;
+  duration: number;
+  price: number;
+  description: string | null;
+  created_at: string;
 }
 
-export function convertDBBookingToBooking(dbBooking: DBBooking): Booking {
-  return {
-    id: dbBooking.id,
-    serviceId: dbBooking.service_id,
-    date: dbBooking.date,
-    time: dbBooking.time,
-    userName: dbBooking.customer_name,
-    userPhone: dbBooking.customer_phone,
-    userEmail: dbBooking.customer_email
-  };
+export interface DatabaseBooking {
+  id: string;
+  salon_id: string;
+  service_id: string;
+  date: string;
+  time: string;
+  end_time: string | null;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  notes: string | null;
+  status: string;
+  created_at: string;
 }
+
+// Konvertavimo funkcijos iš duomenų bazės į frontend tipus
+export const convertSalonFromDb = (dbSalon: DatabaseSalon, services: DatabaseService[]): Salon => ({
+  id: dbSalon.id,
+  slug: dbSalon.slug,
+  name: dbSalon.name,
+  description: dbSalon.description || '',
+  logo: dbSalon.logo || 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=200&h=200',
+  address: dbSalon.address || '',
+  phone: dbSalon.phone || '',
+  email: dbSalon.email || '',
+  services: services.map(convertServiceFromDb),
+  workingHours: {
+    open: dbSalon.working_hours_open,
+    close: dbSalon.working_hours_close
+  }
+});
+
+export const convertServiceFromDb = (dbService: DatabaseService): Service => ({
+  id: dbService.id,
+  name: dbService.name,
+  duration: dbService.duration,
+  price: Number(dbService.price),
+  description: dbService.description || undefined
+});
+
+export const convertBookingFromDb = (dbBooking: DatabaseBooking): Booking => ({
+  id: dbBooking.id,
+  salonId: dbBooking.salon_id,
+  serviceId: dbBooking.service_id,
+  date: dbBooking.date,
+  time: dbBooking.time,
+  endTime: dbBooking.end_time || undefined,
+  userName: dbBooking.customer_name,
+  userPhone: dbBooking.customer_phone,
+  userEmail: dbBooking.customer_email,
+  status: dbBooking.status as Booking['status']
+});
