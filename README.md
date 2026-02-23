@@ -1,228 +1,260 @@
-# 🏢 Booking SaaS - Multi-tenant Reservation System
+# Booking SaaS – Grožio salonų rezervacijų sistema
 
-Moderni daugiabučių salonų rezervacijos sistema su Supabase duomenų baze ir EmailJS el. laiškų integracija.
+Moderni, multi-tenant rezervacijų sistema grožio salonams, sukurta naudojant **React + Vite + Tailwind CSS** ir **Supabase** kaip duomenų bazę.
 
-[![Deploy to GitHub Pages](https://img.shields.io/badge/Deploy-GitHub%20Pages-blue?logo=github)](https://pages.github.com/)
-[![EmailJS](https://img.shields.io/badge/Email-EmailJS-FF6B6B?logo=mail.ru)](https://www.emailjs.com/)
-[![Supabase](https://img.shields.io/badge/DB-Supabase-3ECF8E?logo=supabase)](https://supabase.com/)
+Viskas pateikiama lietuvių kalba.
 
-## 🚀 Funkcijos
+---
 
-- ✅ **Multi-tenant architektūra** - Kiekvienas salonas turi unikalią nuorodą (`/salonSlug`)
-- ✅ **Supabase integracija** - Realaus laiko duomenų bazė PostgreSQL
-- ✅ **Automatiniai el. laiškai** - EmailJS patvirtinimo laiškai po rezervacijos
-- ✅ **Google Calendar** - Pridėti vizitą į kalendorių
-- ✅ **Lietuviška kalba** - Pilnas lokalizavimas
-- ✅ **Mobile-first dizainas** - Optimizuota mobiliesiems įrenginiams
-- ✅ **GitHub Pages hosting** - Nemokamas talpinimas
-
-## 📁 Projekto struktūra
-
-```
-booking-saas/
-├── .github/
-│   └── workflows/
-│       └── deploy.yml          # GitHub Actions deployment
-├── src/
-│   ├── lib/
-│   │   ├── supabase.ts         # Supabase klientas ir funkcijos
-│   │   └── email.ts            # EmailJS siuntimo logika
-│   ├── pages/
-│   │   ├── SalonPage.tsx       # Pagrindinis rezervacijos puslapis
-│   │   └── InstructionsPage.tsx # Integracijų instrukcijos
-│   ├── types/
-│   │   └── index.ts            # TypeScript tipai
-│   ├── App.tsx                 # Pagrindinis komponentas
-│   └── main.tsx                # Entry point
-├── .env.local                  # Aplinkos kintamieji (nepush'inami!)
-├── supabase-schema.sql         # SQL schema duomenų bazei
-├── vite.config.ts              # Vite konfigūracija
-└── README.md                   # Šis failas
-```
-
-## 🛠️ Diegimas
-
-### 1. Klonuokite repozitoriją
-
-```bash
-git clone https://github.com/USERNAME/booking-saas.git
-cd booking-saas
-```
-
-### 2. Įdiekite priklausomybes
+## 1. Projekto paleidimas lokaliai
 
 ```bash
 npm install
+npm run dev
 ```
 
-### 3. Sukonfigūruokite aplinkos kintamuosius
+Aplikacija bus pasiekiama adresu (numatytasis):
 
-Sukurkite `.env.local` failą projekto šaknyje:
+- http://localhost:5173
+
+Demo salonas:
+
+- http://localhost:5173/#/NaujasSalonas
+
+---
+
+## 2. Supabase duomenų bazės sukūrimas
+
+1. Prisijunkite prie [Supabase](https://supabase.com) ir sukurkite naują projektą.
+2. Atidarykite **SQL Editor**.
+3. Nukopijuokite visą `supabase-schema.sql` failo turinį iš šio repo ir įklijuokite į naują SQL užklausą.
+4. Paspauskite **Run**.
+
+Tai sukurs lenteles:
+
+- `salons`
+- `services`
+- `bookings`
+
+Taip pat įterps demo duomenis **NaujasSalonas** salonui.
+
+### 2.1. Supabase API raktai
+
+Supabase projekte eikite į **Project Settings → API** ir nukopijuokite:
+
+- **Project URL** – pvz. `https://mfnkhsxgfjlljwlotkvi.supabase.co`
+- **anon public key** – ilgas raktas, prasidedantis `eyJ...`
+
+Lokaliai sukurkite `.env.local` failą projekto šaknyje (šalia `package.json`):
 
 ```env
-# Supabase Configuration
 VITE_SUPABASE_URL=https://mfnkhsxgfjlljwlotkvi.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbmtoc3hnZmpsbGp3bG90a3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTExNzcsImV4cCI6MjA4NzQyNzE3N30.roYg8Is9opaBZQAQ8AyvnMUXFV6uLhH9ZsGRSW5YbgY
-
-# EmailJS Configuration (dėl laiškų siuntimo)
-VITE_EMAILJS_SERVICE_ID=your_service_id
-VITE_EMAILJS_TEMPLATE_ID=your_template_id
-VITE_EMAILJS_PUBLIC_KEY=your_public_key
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### 4. Paleiskite development serverį
+Tada paleiskite projektą iš naujo:
 
 ```bash
 npm run dev
 ```
 
-Atidarykite [http://localhost:5173](http://localhost:5173)
+---
 
-## 📧 EmailJS Konfigūracija
+## 3. El. laiško siuntimas po rezervacijos (backend pavyzdys)
 
-Kad sistema siųstų patvirtinimo laiškus klientams:
+Frontend (ši Vite aplikacija) pateikia rezervacijos duomenis į **Supabase** ir parodo, kad patvirtinimo laiškas išsiųstas. Kad realiai išsiųstumėte el. laišką, reikia mažo **Node.js backend** su `nodemailer` ir Gmail.
 
-1. **Sukurkite paskyrą** [emailjs.com](https://www.emailjs.com/)
-2. **Pridėkite Gmail servisą** ir prisijunkite su: `littlenestprintables.inc@gmail.com`
-3. **Sukurkite email template**:
+### 3.1. Backend projekto kūrimas
 
-```
-Subject: ✅ Jūsų vizitas patvirtintas - {{salon_name}}
+Sukurkite naują aplanką, pvz. `booking-email-service`:
 
-Sveiki {{to_name}},
-
-Jūsų rezervacija patvirtinta!
-
-📅 Vizito informacija:
-• Salonas: {{salon_name}}
-• Paslauga: {{service_name}}
-• Data: {{booking_date}}
-• Laikas: {{booking_time}}
-• Trukmė: {{duration}} min.
-• Kaina: {{price}}€
-
-📍 Adresas: {{salon_address}}
-📞 Tel.: {{salon_phone}}
-
-Iki pasimatymo!
+```bash
+mkdir booking-email-service
+cd booking-email-service
+npm init -y
+npm install express cors nodemailer googleapis dotenv
 ```
 
-4. **Įrašykite Service ID, Template ID ir Public Key** į `.env.local`
+Sukurkite `server.js`:
 
-## 🗄️ Supabase SQL Schema
+```js
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const nodemailer = require('nodemailer');
+const { google } = require('googleapis');
 
-Paleiskite šį SQL savo Supabase projekte:
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-```sql
--- Salonų lentelė
-CREATE TABLE salons (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  logo TEXT,
-  address TEXT,
-  phone TEXT,
-  email TEXT,
-  working_hours_open TEXT NOT NULL DEFAULT '09:00',
-  working_hours_close TEXT NOT NULL DEFAULT '18:00'
+const OAuth2 = google.auth.OAuth2;
+const oauth2Client = new OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  'https://developers.google.com/oauthplayground'
 );
 
--- Paslaugų lentelė
-CREATE TABLE services (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  duration INT NOT NULL,
-  price DECIMAL(10, 2) NOT NULL DEFAULT 0
-);
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
 
--- Rezervacijų lentelė
-CREATE TABLE bookings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
-  service_id UUID REFERENCES services(id) ON DELETE CASCADE,
-  date TEXT NOT NULL,
-  time TEXT NOT NULL,
-  end_time TEXT,
-  customer_name TEXT NOT NULL,
-  customer_email TEXT NOT NULL,
-  customer_phone TEXT NOT NULL,
-  status TEXT DEFAULT 'confirmed'
-);
+async function createTransporter() {
+  const accessToken = await oauth2Client.getAccessToken();
 
--- RLS politikos
-ALTER TABLE salons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE services ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      type: 'OAuth2',
+      user: process.env.EMAIL_FROM, // <== ČIA ĮRAŠYKITE SAVO SIUNTĖJO EL. PAŠTĄ
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+      accessToken: accessToken.token,
+    },
+  });
+}
 
-CREATE POLICY "Public read salons" ON salons FOR SELECT USING (true);
-CREATE POLICY "Public read services" ON services FOR SELECT USING (true);
-CREATE POLICY "Public read bookings" ON bookings FOR SELECT USING (true);
-CREATE POLICY "Public insert bookings" ON bookings FOR INSERT WITH CHECK (true);
+app.post('/send-booking-email', async (req, res) => {
+  const {
+    customerEmail,
+    customerName,
+    salonName,
+    serviceName,
+    date,
+    time,
+  } = req.body;
+
+  try {
+    const transporter = await createTransporter();
+
+    const mailOptions = {
+      from: `${salonName} <${process.env.EMAIL_FROM}>`,
+      to: customerEmail,
+      subject: `Jūsų vizito patvirtinimas – ${salonName}`,
+      text: `Sveiki, ${customerName},\n\nJūsų vizitas sėkmingai užregistruotas.\n\nSalonas: ${salonName}\nPaslauga: ${serviceName}\nData: ${date}\nLaikas: ${time}\n\nJeigu norėtumėte pakeisti ar atšaukti vizitą, susisiekite su mumis.`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Klaida siunčiant el. laišką:', err);
+    res.status(500).json({ success: false, error: 'Nepavyko išsiųsti el. laiško' });
+  }
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Email serveris paleistas ant porto ${PORT}`);
+});
 ```
 
-## 📦 GitHub Pages Deployment
+### 3.2. Kur įrašyti savo el. paštą
 
-### Automatinis deployment
+Sukurkite `.env` tame pačiame backend aplanke:
 
-Kiekvienas `git push` į `main` šaką automatiškai sukurs ir įdiegs jūsų svetainę.
-
-### Rankinis deployment
-
-1. Eikite į GitHub repozitoriją
-2. Atidarykite **Actions** tab
-3. Pasirinkite **Deploy to GitHub Pages** workflow
-4. Spauskite **Run workflow**
-
-### Svetainės adresas
-
-Po deploymento svetainė bus pasiekiama:
-
-```
-https://USERNAME.github.io/booking-saas/
+```env
+EMAIL_FROM=littlenestprintables.inc@gmail.com
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REFRESH_TOKEN=...
 ```
 
-## 🎯 Naudojimas
+- `EMAIL_FROM` – tai siuntėjo adresas (šiuo metu maketas: `littlenestprintables.inc@gmail.com`).
 
-### Demo salonas
+Tada paleiskite backend:
 
-Aplankykite demo saloną:
+```bash
+node server.js
 ```
-https://USERNAME.github.io/booking-saas/NaujasSalonas
+
+### 3.3. Frontend sujungimas su backend
+
+Po sėkmingos rezervacijos sukūrimo Supabase (vietoje, kur vedate vartotoją į patvirtinimo žingsnį), iškvieskite:
+
+```ts
+await fetch('http://localhost:4000/send-booking-email', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    customerEmail: formData.email,
+    customerName: formData.name,
+    salonName: salon.name,
+    serviceName: selectedService.name,
+    date: selectedDate,
+    time: selectedTime,
+  }),
+}).catch(() => {
+  console.warn('Nepavyko išsiųsti el. laiško, tačiau rezervacija sukurta.');
+});
 ```
 
-### Naujo salono pridėjimas
-
-1. Pridėkite saloną į Supabase `salons` lentelę
-2. Pridėkite paslaugas į `services` lentelę
-3. Salonas bus pasiekiamas per: `/salono-slug`
-
-## 🛡️ Saugumas
-
-- ✅ Row Level Security (RLS) politikos Supabase
-- ✅ Aplinkos kintamieji slaptiems raktams
-- ✅ Input validacija formose
-- ✅ SQL injection prevencija per Supabase ORM
-
-## 📱 Palaikomos naršyklės
-
-- Chrome (90+)
-- Firefox (88+)
-- Safari (14+)
-- Edge (90+)
-
-## 📝 Licencija
-
-MIT License - nemokamas naudojimas asmeniniams ir komerciniams projektams.
-
-## 🆘 Pagalba
-
-Jei turite klausimų arba radote klaidą:
-
-1. Patikrinkite [Instructions Page](https://USERNAME.github.io/booking-saas/instrukcijos)
-2. Sukurkite [GitHub Issue](https://github.com/USERNAME/booking-saas/issues)
+Frontend jau rodo pranešimą, kad patvirtinimo laiškas išsiųstas – šis backend užtikrina realų išsiuntimą.
 
 ---
 
-Sukurta su ❤️ Lietuvoje
+## 4. GitHub Pages hostingas
+
+Projektas naudoja `HashRouter`, todėl idealiai tinka GitHub Pages.
+
+### 4.1. Vite konfigūracija
+
+`vite.config.ts` faile jau yra:
+
+```ts
+export default defineConfig({
+  base: './',
+  // ...
+});
+```
+
+- Tai leidžia projektą talpinti tiek repo šaknyje, tiek GitHub Pages.
+
+### 4.2. Git repo ir GitHub
+
+```bash
+git init
+git add .
+git commit -m "Pradinis commitas"
+```
+
+GitHub:
+
+1. Sukurkite naują repo (pvz. `booking-saas`).
+2. Prijunkite remote ir išsiųskite:
+
+```bash
+git branch -M main
+git remote add origin https://github.com/<jusu-vartotojas>/booking-saas.git
+git push -u origin main
+```
+
+### 4.3. GitHub Pages Actions workflow
+
+Repo jau turi `.github/workflows/deploy.yml`, kuris:
+
+- Ant `push` į `main` paleidžia:
+  - `npm ci || npm install`
+  - `npm run build`
+  - įkelia `dist` į GitHub Pages.
+
+Github UI:
+
+1. Eikite į **Settings → Pages**.
+2. „Build and deployment“ pasirinkite **GitHub Actions**.
+3. Po pirmo sėkmingo workflow, čia pamatysite nuorodą į savo svetainę, pvz.:
+
+```text
+https://<jusu-vartotojas>.github.io/booking-saas/
+```
+
+Aplikacijos maršrutai veiks per hash: `#/NaujasSalonas`.
+
+---
+
+## 5. Maršrutai
+
+- `/` – SaaS pagrindinis (landing) puslapis.
+- `#/NaujasSalonas` – demo salono rezervacijų puslapis.
+
+Supabase naudojama kaip vienintelis duomenų šaltinis (mock failas pašalintas).

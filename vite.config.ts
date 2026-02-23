@@ -10,8 +10,10 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Set this to your GitHub repo name when deploying, e.g. "/booking-saas/"
+  // If you deploy at user root (username.github.io), you can keep it as "/".
+  base: "./BookingSaas/",
   plugins: [react(), tailwindcss(), viteSingleFile()],
-  base: "/booking-saas/",
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

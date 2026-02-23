@@ -12,12 +12,6 @@ export function LandingPage() {
           </div>
           <div className="flex items-center gap-6">
             <Link
-              to="/instrukcijos"
-              className="text-sm font-medium text-stone-500 hover:text-stone-900 transition-colors hidden sm:block"
-            >
-              Integracijų Gidas
-            </Link>
-            <Link
               to="/NaujasSalonas"
               className="text-sm font-medium text-stone-900 bg-stone-100 hover:bg-stone-200 px-4 py-2 rounded-full transition-colors"
             >
@@ -41,12 +35,6 @@ export function LandingPage() {
               className="px-8 py-3 rounded-full bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors inline-flex items-center gap-2 shadow-lg"
             >
               Išbandyti Demo <Sparkles className="w-4 h-4" />
-            </Link>
-            <Link
-              to="/instrukcijos"
-              className="px-8 py-3 rounded-full bg-white border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 transition-colors inline-flex items-center gap-2"
-            >
-              Integracijų Instrukcija
             </Link>
           </div>
         </section>

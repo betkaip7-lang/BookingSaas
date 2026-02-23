@@ -17,10 +17,6 @@ import {
   DatabaseService,
   DatabaseBooking
 } from "../lib/supabase";
-import { 
-  sendBookingConfirmationEmail, 
-  isEmailConfigured 
-} from "../lib/email";
 import { Calendar as CalendarIcon, Clock, ArrowLeft, CheckCircle2, ChevronRight, MapPin, Scissors, Info, CalendarPlus, MailCheck, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { format, addDays, startOfToday } from "date-fns";
 import { lt } from "date-fns/locale";
@@ -197,22 +193,6 @@ export function SalonPage() {
         };
         setBookings(prev => [...prev, newBooking]);
       }
-
-      // Siųsti patvirtinimo el. laišką
-      const emailData = {
-        to_email: formData.email,
-        to_name: formData.name,
-        salon_name: salon.name,
-        service_name: selectedService.name,
-        booking_date: selectedDate,
-        booking_time: selectedTime,
-        duration: selectedService.duration,
-        price: selectedService.price,
-        salon_address: salon.address || '',
-        salon_phone: salon.phone || ''
-      };
-      
-      await sendBookingConfirmationEmail(emailData);
       
       setStep('confirmation');
     } catch (error) {
@@ -556,12 +536,7 @@ export function SalonPage() {
             {/* Email verification notice */}
             <div className="flex items-start sm:items-center gap-3 bg-blue-50/50 text-blue-800 border border-blue-100 px-5 py-4 rounded-xl mb-8 text-sm max-w-sm w-full text-left shadow-sm">
               <MailCheck className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5 sm:mt-0" />
-              <div className="leading-relaxed">
-                <p>Patvirtinimo laiškas su vizito informacija išsiųstas adresu <span className="font-semibold">{formData.email}</span></p>
-                {!isEmailConfigured() && (
-                  <p className="text-xs text-stone-500 mt-1">(EmailJS nėra sukonfigūruotas - el. laiškas neišsiųstas tikrovėje)</p>
-                )}
-              </div>
+              <p className="leading-relaxed">Patvirtinimo laiškas su vizito informacija išsiųstas adresu <span className="font-semibold block sm:inline">{formData.email}</span></p>
             </div>
             
             <div className="bg-white border border-stone-200 rounded-2xl p-6 w-full max-w-sm text-left space-y-4 mb-6">
